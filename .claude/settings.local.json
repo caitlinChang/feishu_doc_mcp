@@ -3,7 +3,12 @@
     "allow": [
       "WebFetch(domain:open.feishu.cn)",
       "Bash(python feishu_doc_api_research.py)",
-      "Bash(python3 feishu_doc_api_research.py)"
+      "Bash(python3 feishu_doc_api_research.py)",
+      "Bash(python3 server.py)",
+      "Bash(pip install -r requirements.txt)",
+      "Bash(curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py)",
+      "Bash(python3 get-pip.py)",
+      "Bash(python3 -m pip install -r requirements.txt)"
     ],
     "deny": []
   }

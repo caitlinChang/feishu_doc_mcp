@@ -1,0 +1,28 @@
+{
+    "name": "mcp__feishu_doc_fetch",
+    "description": "Fetch Feishu document content from URL and convert to Markdown",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Feishu document URL (wiki or docx)"       
+        },
+        "raw_text": {
+          "type": "boolean",
+          "default": false,
+          "description": "Return raw text instead of blocks"        
+        }
+      },
+      "required": ["url"]
+    },
+    "handler": {
+      "type": "http",
+      "url": "http://localhost:8000/fetch_doc",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "response_format": "json"
+    }
+  }

@@ -89,3 +89,8 @@ pip install -r requirements.txt
 1. 飞书开放平台官方文档
 2. 飞书开发者社区
 3. GitHub相关开源项目
+
+## 启动服务
+uvicorn server:app --reload --host 0.0.0.0 --port 8080
+
+发送消息如"使用 mcp_feishu_doc_fetch 获取 https://xxx的内容"
