@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:open.feishu.cn)",
+      "Bash(python feishu_doc_api_research.py)",
+      "Bash(python3 feishu_doc_api_research.py)"
+    ],
+    "deny": []
+  }
+}

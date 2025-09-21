@@ -1,0 +1,6 @@
+requests>=2.28.0
+mcp>=0.3.0
+uvicorn>=0.24.0
+fastapi>=0.104.0
+# 飞书API调用所需的主要依赖
+# MCP服务端依赖
