@@ -18,7 +18,7 @@
     },
     "handler": {
       "type": "http",
-      "url": "http://localhost:8000/fetch_doc",
+      "url": "http://192.168.1.246:8000/fetch_doc",
       "method": "POST",
       "headers": {
         "Content-Type": "application/json"
