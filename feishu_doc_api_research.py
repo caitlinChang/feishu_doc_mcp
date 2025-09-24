@@ -16,7 +16,7 @@ class FeishuDocAPI:
         初始化飞书API客户端
         """
         self.app_id = 'cli_a8454a4ec139100d'
-        self.app_secret = ''
+        self.app_secret = '4cubJnT2qSkMquP8XJcqBdFUeqwU7fPz'
         self.base_url = "https://open.feishu.cn/open-apis"
         self.access_token = None
     
