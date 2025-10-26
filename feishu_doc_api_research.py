@@ -9,14 +9,15 @@ import requests
 import re
 import json
 from typing import Dict, Optional, Tuple, List
+from api import config
 
 class FeishuDocAPI:
     def __init__(self):
         """
         初始化飞书API客户端
         """
-        self.app_id = 'cli_9ff99e2a687a100e'
-        self.app_secret = '7gahJEEkhktRmiUEGDeRKnG1WjVSIVWA'
+        self.app_id = config.APP_ID
+        self.app_secret = config.APP_SECRET
         self.base_url = "https://open.feishu.cn/open-apis"
         self.access_token = None
     

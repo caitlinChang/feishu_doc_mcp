@@ -1,8 +1,14 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import urllib.parse
 import requests
-import uvicorn
-import os
+import webbrowser
+from api import config
+
+APP_ID = config.APP_ID
+APP_SECRET = config.APP_SECRET
+REDIRECT_URI = config.REDIRECT_URI
 
 app = FastAPI()
 

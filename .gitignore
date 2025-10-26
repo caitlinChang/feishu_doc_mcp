@@ -4,3 +4,4 @@ server.log
 refresh_token.txt
 api/config.py
 */config
+/doc/*

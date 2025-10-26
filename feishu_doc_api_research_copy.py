@@ -10,14 +10,15 @@ import re
 import json
 import os
 from typing import Dict, Optional, Tuple, List
+from api import config
 
 class FeishuDocAPI:
     def __init__(self):
         """
         初始化飞书API客户端
         """
-        self.app_id = 'cli_9ff99e2a687a100e'
-        self.app_secret = '7gahJEEkhktRmiUEGDeRKnG1WjVSIVWA'
+        self.app_id = config.APP_ID
+        self.app_secret = config.APP_SECRET
         self.base_url = "https://open.feishu.cn/open-apis"
         self.user_access_token = None
         self.refresh_token = self._load_refresh_token()
@@ -292,7 +293,6 @@ def main():
         
         print(f"Markdown 文件已生成: {output_filename}")
         preview = md_content[:500] + "..." if len(md_content) > 500 else md_content
-        print("内容预览:")
         print(preview)
         
     except Exception as e:

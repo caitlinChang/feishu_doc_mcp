@@ -1,11 +1,11 @@
 import requests
 import argparse
 from urllib.parse import urlparse, parse_qs
+from api import config
 
-# --- Configuration (should match your main server config) ---
-APP_ID = 'cli_9ff99e2a687a100e'
-APP_SECRET = '7gahJEEkhktRmiUEGDeRKnG1WjVSIVWA'
-BASE_URL = "https://open.feishu.cn/open-apis"
+APP_ID = config.APP_ID
+APP_SECRET = config.APP_SECRET
+BASE_URL = config.BASE_URL
 
 def get_token_from_url(redirect_url: str):
     """
