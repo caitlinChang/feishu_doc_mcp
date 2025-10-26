@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-飞书文档API调研示例代码
+飞书文档API调研示例代码 (用户身份认证版本)
 根据飞书文档链接获取文档内容
 """
 
 import requests
 import re
 import json
+import os
 from typing import Dict, Optional, Tuple, List
 
 class FeishuDocAPI:
@@ -18,17 +19,29 @@ class FeishuDocAPI:
         self.app_id = 'cli_9ff99e2a687a100e'
         self.app_secret = '7gahJEEkhktRmiUEGDeRKnG1WjVSIVWA'
         self.base_url = "https://open.feishu.cn/open-apis"
-        self.access_token = None
-    
-    def get_access_token(self) -> str:
+        self.user_access_token = None
+        self.refresh_token = self._load_refresh_token()
+
+    def _load_refresh_token(self) -> Optional[str]:
         """
-        获取租户访问令牌 (tenant_access_token)
+        从本地文件加载 refresh_token
         """
-        if self.access_token:
-            return self.access_token
-        
-        url = f"{self.base_url}/auth/v3/tenant_access_token/internal/"
+        if os.path.exists("refresh_token.txt"):
+            with open("refresh_token.txt", "r") as f:
+                return f.read().strip()
+        return None
+
+    def refresh_user_access_token(self) -> str:
+        """
+        刷新 user_access_token
+        """
+        if not self.refresh_token:
+            raise Exception("未找到 refresh_token.txt，请先运行 auth_server.py 完成授权流程。")
+
+        url = f"{self.base_url}/authen/v1/refresh_access_token"
         payload = {
+            "grant_type": "refresh_token",
+            "refresh_token": self.refresh_token,
             "app_id": self.app_id,
             "app_secret": self.app_secret
         }
@@ -39,14 +52,31 @@ class FeishuDocAPI:
             data = response.json()
             
             if data.get("code") == 0:
-                self.access_token = data["tenant_access_token"]
-                return self.access_token
+                token_data = data.get("data", {})
+                self.user_access_token = token_data.get("access_token")
+                # Update the refresh token if a new one is provided
+                new_refresh_token = token_data.get("refresh_token")
+                if new_refresh_token:
+                    self.refresh_token = new_refresh_token
+                    with open("refresh_token.txt", "w") as f:
+                        f.write(self.refresh_token)
+
+                print("User access token refreshed successfully.")
+                return self.user_access_token
             else:
-                raise Exception(f"获取访问令牌失败: {data.get('msg')}")
+                raise Exception(f"刷新用户访问令牌失败: {data.get('msg')}")
                 
         except requests.exceptions.RequestException as e:
             raise Exception(f"网络请求失败: {e}")
-    
+
+    def get_access_token(self) -> str:
+        """
+        获取有效的 user_access_token，如果不存在或即将过期则刷新
+        """
+        # For simplicity, we refresh the token on every run.
+        # A more optimized approach would be to check the expiry time.
+        return self.refresh_user_access_token()
+
     def extract_tokens(self, doc_url: str) -> Tuple[str, Optional[str], str]:
         """
         从飞书文档链接中提取token和类型
@@ -72,7 +102,7 @@ class FeishuDocAPI:
             return 'docx', None, match.group(1)
         
         raise ValueError("无法从链接中提取token，请检查链接格式")
-    
+
     def get_content(self, doc_url: str, raw_text: bool = False) -> Dict:
         """
         获取文档内容，支持不同类型
@@ -83,41 +113,13 @@ class FeishuDocAPI:
         type_, space_id, token = self.extract_tokens(doc_url)
         access_token = self.get_access_token()
         
-        if type_ == 'wiki':
-            if raw_text:
-                endpoint = "raw_content"
-                url = f"{self.base_url}/docx/v1/documents/{token}/{endpoint}"
-                params = None
-                headers = {
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json"
-                }
-            else:
-                endpoint = "blocks"
-                url = f"{self.base_url}/docx/v1/documents/{token}/{endpoint}"
-                params = None
-                headers = {
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json"
-                }
-        elif type_ == 'docx':
-            endpoint = "raw_content" if raw_text else "blocks"
-            url = f"{self.base_url}/docx/v1/documents/{token}/{endpoint}"
-            params = None
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-        elif type_ == 'doc':
-            endpoint = "raw_content" if raw_text else "content"
-            url = f"{self.base_url}/doc/v2/{token}/{endpoint}"
-            params = None
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-        else:
-            raise ValueError("不支持的文档类型")
+        # All modern Feishu docs use the docx API
+        endpoint = "raw_content" if raw_text else "blocks"
+        url = f"{self.base_url}/docx/v1/documents/{token}/{endpoint}"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
         
         try:
             response = requests.get(url, headers=headers)
@@ -144,11 +146,14 @@ def parse_blocks_to_md(data: Dict) -> str:
     
     md_lines = []
     
-    # 查找根块，通常block_type为1
+    # 查找根块 (page block)
     root = next((item for item in item_data if item.get('block_type') == 1), None)
     if not root:
-        root = item_data[0]
-    
+        # If no page block, parse all blocks sequentially
+        for item in item_data:
+            parse_block_recursive(item['block_id'], block_map, md_lines)
+        return '\n\n'.join(md_lines)
+
     # 解析标题
     page = root.get('page', {})
     if page:
@@ -181,12 +186,53 @@ def parse_block_recursive(block_id: str, block_map: Dict[str, Dict], md_lines: L
         elements = text_obj.get('elements', [])
         content = ''
         for elem in elements:
-            content += elem.get('text_run', {}).get('content', '')
+            text_run = elem.get('text_run', {})
+            line_content = text_run.get('content', '')
+            style = text_run.get('text_element_style', {})
+            if style.get('bold'):
+                line_content = f"**{line_content}**"
+            if style.get('italic'):
+                line_content = f"*{line_content}*"
+            if style.get('strikethrough'):
+                line_content = f"~~{line_content}~~"
+            if style.get('underline'):
+                # Markdown doesn't have a standard underline, but <u> can be used
+                line_content = f"<u>{line_content}</u>"
+            content += line_content
+
         if content.strip():
             md_lines.append(content.strip())
     
+    elif bt in [3, 4, 5, 6]: # H1-H4
+        text_obj = block.get(f'heading{bt-1}', {})
+        elements = text_obj.get('elements', [])
+        content = ''.join(elem.get('text_run', {}).get('content', '') for elem in elements)
+        if content.strip():
+            md_lines.append(f"{'#' * (bt-1)} {content.strip()}")
+
+    elif bt == 11: # Bulleted List
+        text_obj = block.get('bullet', {})
+        elements = text_obj.get('elements', [])
+        content = ''.join(elem.get('text_run', {}).get('content', '') for elem in elements)
+        if content.strip():
+            md_lines.append(f"- {content.strip()}")
+
+    elif bt == 12: # Ordered List
+        text_obj = block.get('ordered', {})
+        elements = text_obj.get('elements', [])
+        content = ''.join(elem.get('text_run', {}).get('content', '') for elem in elements)
+        if content.strip():
+            # The sequence number needs context from the parent, simplified here
+            md_lines.append(f"1. {content.strip()}")
+
+    elif bt == 15: # Code Block
+        text_obj = block.get('code', {})
+        elements = text_obj.get('elements', [])
+        content = ''.join(elem.get('text_run', {}).get('content', '') for elem in elements)
+        lang = block.get('code', {}).get('style', {}).get('language', '')
+        md_lines.append(f"```{lang}\n{content.strip()}\n```")
+
     elif bt == 31:  # 表格块
-        md_lines.append("## 表格")
         table_obj = block.get('table', {})
         cells = table_obj.get('cells', [])
         property_ = table_obj.get('property', {})
@@ -203,7 +249,7 @@ def parse_block_recursive(block_id: str, block_map: Dict[str, Dict], md_lines: L
                     cell_id = cells[idx]
                     cell_md = []
                     parse_block_recursive(cell_id, block_map, cell_md)
-                    grid[r][c] = ' '.join(cell_md).strip()
+                    grid[r][c] = ' '.join(cell_md).strip().replace('\n', '<br>')
                 idx += 1
         
         # 生成MD表格
@@ -213,9 +259,8 @@ def parse_block_recursive(block_id: str, block_map: Dict[str, Dict], md_lines: L
             rows_md = [header, separator]
             for row in grid[1:]:
                 rows_md.append("| " + " | ".join(row) + " |")
-            md_lines.extend(rows_md)
+            md_lines.append('\n'.join(rows_md))
     
-    # 其他类型可以扩展
     # 递归子块
     for child_id in block.get('children', []):
         parse_block_recursive(child_id, block_map, md_lines)
@@ -224,25 +269,28 @@ def main():
     """
     示例用法
     """
-    # 示例文档链接
-    doc_url = "https://y0by3nrkq8i.feishu.cn/wiki/LiANwgX12iOJGOkR7GRczr7LnM8"
+    # 示例文档链接 (请替换为您自己的链接)
+    doc_url = "https://bytedance.larkoffice.com/docx/EU6HdJw0BoZvi3xO1xzcEaARnZc"
     
     # 创建API客户端
     feishu = FeishuDocAPI()
     
     try:
+        # 获取并刷新用户访问令牌 (此步骤在 get_content 内部自动完成)
+        print("准备获取文档内容 (将自动刷新用户令牌)...")
+
         # 获取富文本内容
-        print("获取文档内容...")
         content = feishu.get_content(doc_url, raw_text=False)
         
         # 解析为Markdown
         md_content = parse_blocks_to_md(content)
         
         # 生成markdown文件
-        with open('feishu_content.md', 'w', encoding='utf-8') as f:
+        output_filename = 'feishu_content_user_auth.md'
+        with open(output_filename, 'w', encoding='utf-8') as f:
             f.write(md_content)
         
-        print("Markdown 文件已生成: feishu_content.md")
+        print(f"Markdown 文件已生成: {output_filename}")
         preview = md_content[:500] + "..." if len(md_content) > 500 else md_content
         print("内容预览:")
         print(preview)
