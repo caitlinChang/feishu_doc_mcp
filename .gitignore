@@ -2,3 +2,5 @@ server.log
 
 # Sensitive user credentials
 refresh_token.txt
+api/config.py
+*/config
