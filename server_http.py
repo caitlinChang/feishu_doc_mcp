@@ -112,6 +112,59 @@ class FeishuDocAPI:
         
         return data.get("data", {}).get("content", "")
 
+    def convert_markdown_to_blocks(self, markdown_content: str) -> List[Dict]:
+        access_token = self.get_access_token()
+        url = f"{self.base_url}/docx/v1/documents/blocks/convert"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        payload = {
+            "content_type": "markdown",
+            "content": markdown_content
+        }
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("code") != 0:
+            raise Exception(f"API Error: {data.get('msg', 'Unknown error')}, code: {data.get('code')}")
+        return data.get("data", {}).get("blocks", [])
+
+    def create_document(self, folder_token: str, body: dict = None) -> dict:
+        access_token = self.get_access_token()
+        url = f"{self.base_url}/docx/v1/documents"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        payload = {"folder_token": folder_token}
+        if body:
+            payload['body'] = body
+        response = requests.post(url, headers=headers, json=payload)
+        data = response.json()
+        if data.get("code") != 0:
+            raise Exception(f"API Error: {data.get('msg', 'Unknown error')}, code: {data.get('code')}")
+        response.raise_for_status()
+        return data.get("data")
+
+    def insert_blocks(self, document_id: str, blocks: List[Dict]):
+        access_token = self.get_access_token()
+        url = f"{self.base_url}/docx/v1/documents/{document_id}/blocks/{document_id}/children"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        payload = {
+            "children": blocks
+        }
+        response = requests.post(url, headers=headers, json=payload)
+        data = response.json()
+        if data.get("code") != 0:
+            raise Exception(f"API Error: {data.get('msg', 'Unknown error')}, code: {data.get('code')}")
+
+        response.raise_for_status()
+        return data.get("data")
+
 api_client = FeishuDocAPI()
 
 # --- Markdown Parsing Functions ---
@@ -180,6 +233,28 @@ async def fetch_doc_endpoint(request: DocRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class CreateDocRequest(BaseModel):
+    folder_token: str
+    markdown_content: str
+
+@app.post("/create-doc")
+async def create_doc_endpoint(request: CreateDocRequest):
+    try:
+        # 1. Create an empty document
+        new_doc_data = api_client.create_document(request.folder_token)
+        document_id = new_doc_data.get("document", {}).get("document_id")
+
+        # 2. Convert markdown to blocks
+        blocks = api_client.convert_markdown_to_blocks(request.markdown_content)
+
+        # 3. Insert blocks into the new document
+        api_client.insert_blocks(document_id, blocks)
+
+        doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+        return {"success": True, "url": doc_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- Server Startup Logic ---
 def run_server():
     if not os.path.exists("refresh_token.txt"):
@@ -187,7 +262,7 @@ def run_server():
             f"https://open.feishu.cn/open-apis/authen/v1/authorize"
             f"?app_id={APP_ID}"
             f"&redirect_uri={quote(REDIRECT_URI)}"
-            f"&scope=docx:document:readonly"
+            f"&scope=docx:document:readonly%20docx:document:create%20docx:document:write_only"
         )
         print("="*80)
         print("### 授权流程指南 (Authorization Required) ###")
