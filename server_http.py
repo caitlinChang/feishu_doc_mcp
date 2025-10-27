@@ -5,6 +5,7 @@ from typing import Optional, List
 import os
 import re
 import uvicorn
+import traceback
 from urllib.parse import quote
 from api import config
 from api.create_mr import create_mr, CreateMergeRequestResponse
@@ -80,46 +81,118 @@ async def create_mr_endpoint(request: CreateMRRequest):
 class CreateDocRequest(BaseModel):
     url: str
     doc_url: Optional[str] = None
+    is_replace: Optional[bool] = False
 
 
 @app.post("/create-doc")
 async def create_doc_endpoint(request: CreateDocRequest):
+    print("\n" + "="*80)
+    print("[create-doc] Starting create_doc request")
+    print(f"[create-doc] File path: {request.url}")
+    print(f"[create-doc] Doc URL: {request.doc_url}")
+    print(f"[create-doc] Is replace: {request.is_replace}")
+    print("="*80 + "\n")
+
     try:
         # 1. Read markdown content from the given file path
+        print(f"[create-doc] Step 1: Reading markdown file from {request.url}")
         try:
             with open(request.url, 'r', encoding='utf-8') as f:
                 markdown_content = f.read()
+            print(f"[create-doc] Successfully read {len(markdown_content)} characters from file")
         except FileNotFoundError:
+            print(f"[create-doc] ERROR: File not found at path: {request.url}")
             raise HTTPException(status_code=400, detail=f"File not found at path: {request.url}")
         except Exception as e:
+            print(f"[create-doc] ERROR: Error reading file: {e}")
             raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
 
         document_id = None
         # 2. Determine the document_id
         if request.doc_url:
+            print(f"[create-doc] Step 2: Using existing document from URL: {request.doc_url}")
+
             # Extract document_id from doc_url
             match = re.search(r'/docx/([a-zA-Z0-9]+)', request.doc_url)
             if match:
                 document_id = match.group(1)
+                print(f"[create-doc] Extracted document_id: {document_id}")
             else:
+                print(f"[create-doc] ERROR: Invalid doc_url format. Could not extract document_id from {request.doc_url}")
                 raise HTTPException(status_code=400, detail="Invalid doc_url format. Could not extract document_id.")
+
+            if request.is_replace:
+                print(f"[create-doc] Step 3: Replacing existing content (is_replace=true)")
+
+                # Get all blocks
+                print(f"[create-doc] Fetching all blocks from document...")
+                all_blocks = api_client.get_all_blocks(document_id)
+                print(f"[create-doc] Retrieved {len(all_blocks)} total blocks")
+
+                if all_blocks:
+                    # Find the title block (first heading block, block_type == 3)
+                    title_block_id = None
+                    for block in all_blocks:
+                        if block.get('block_type') == 3:  # Heading block
+                            title_block_id = block.get('block_id')
+                            print(f"[create-doc] Found title block: {title_block_id}")
+                            break
+
+                    # Delete all blocks after the title
+                    print(f"[create-doc] Deleting blocks after title...")
+                    api_client.delete_blocks_after_title(document_id, title_block_id)
+                    print(f"[create-doc] Blocks deleted successfully")
+
+                    # Wait a bit for the deletion to complete
+                    print(f"[create-doc] Waiting 1 second for deletion to complete...")
+                    import time
+                    time.sleep(1)
+                else:
+                    print(f"[create-doc] No blocks found in document")
+            else:
+                print(f"[create-doc] Step 3: Appending content (is_replace=false)")
+
         else:
+            print(f"[create-doc] Step 2: Creating new document")
             # Create a new empty document
             new_doc_data = api_client.create_document(config.FOLDER_TOKEN)
             document_id = new_doc_data.get("document", {}).get("document_id")
+            print(f"[create-doc] Created new document with ID: {document_id}")
 
         if not document_id:
+            print(f"[create-doc] ERROR: Failed to get document_id")
             raise HTTPException(status_code=500, detail="Failed to get document_id.")
 
         # 3. Convert markdown to blocks
+        print(f"[create-doc] Step 4: Converting markdown to blocks")
         blocks = api_client.convert_markdown_to_blocks(markdown_content)
+        print(f"[create-doc] Converted markdown to {len(blocks)} blocks")
 
         # 4. Insert blocks into the document
+        print(f"[create-doc] Step 5: Inserting {len(blocks)} blocks into document")
         api_client.insert_blocks(document_id, blocks)
+        print(f"[create-doc] Blocks inserted successfully")
 
-        final_doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+        # Use the same domain as the input doc_url if provided
+        if request.doc_url:
+            match = re.search(r'https://([^/]+)', request.doc_url)
+            if match:
+                domain = match.group(1)
+                final_doc_url = f"https://{domain}/docx/{document_id}"
+            else:
+                final_doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+        else:
+            final_doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+
+        print(f"[create-doc] SUCCESS: Document URL: {final_doc_url}")
+        print("="*80 + "\n")
+
         return {"success": True, "url": final_doc_url}
     except Exception as e:
+        print(f"[create-doc] EXCEPTION: {type(e).__name__}: {str(e)}")
+        traceback.print_exc()
+        print("="*80 + "\n")
+
         # To be safe, catch any other exceptions and return a 500 error
         if isinstance(e, HTTPException):
             raise e

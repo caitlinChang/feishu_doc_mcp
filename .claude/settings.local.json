@@ -9,7 +9,8 @@
       "Bash(curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py)",
       "Bash(python3 get-pip.py)",
       "Bash(python3 -m pip install -r requirements.txt)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "WebFetch(domain:open.larkoffice.com)"
     ],
     "deny": []
   }

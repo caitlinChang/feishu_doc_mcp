@@ -21,8 +21,9 @@ class DocRequest(BaseModel):
     format: Optional[str] = None
 
 class CreateDocRequest(BaseModel):
-    folder_token: str
-    markdown_content: str
+    url: str
+    doc_url: Optional[str] = None
+    is_replace: Optional[bool] = False
 
 class CreateMRRequest(BaseModel):
     title: str
@@ -69,22 +70,73 @@ def fetch_doc(request: DocRequest):
 @mcp.tool()
 def create_doc(request: CreateDocRequest):
     """
-    Create a new Feishu document with the given markdown content.
+    Create a new Feishu document with markdown content from a file, or update an existing document.
     Args:
-        folder_token: The token of the folder to create the document in.
-        markdown_content: The markdown content of the document.
+        url: The file path to the markdown file.
+        doc_url: (Optional) The URL of an existing Feishu document to update.
+        is_replace: (Optional) If true, replace existing content. If false, append content. Default is false.
     Returns:
-        A dictionary containing the success status and the URL of the new document.
+        A dictionary containing the success status and the URL of the document.
     """
+    from api import config
+    import time
+
     try:
-        new_doc_data = api_client.create_document(request.folder_token)
-        document_id = new_doc_data.get("document", {}).get("document_id")
+        # 1. Read markdown content from file
+        with open(request.url, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
 
-        blocks = api_client.convert_markdown_to_blocks(request.markdown_content)
+        document_id = None
 
+        # 2. Determine the document_id
+        if request.doc_url:
+            # Use existing document
+            # Extract document_id from doc_url
+            match = re.search(r'/docx/([a-zA-Z0-9]+)', request.doc_url)
+            if match:
+                document_id = match.group(1)
+            else:
+                raise Exception("Invalid doc_url format. Could not extract document_id.")
+
+            if request.is_replace:
+                # Get all blocks and filter deletable ones
+                all_blocks = api_client.get_all_blocks(document_id)
+                if all_blocks:
+                    # Find the title block (first heading block)
+                    title_block_id = None
+                    for block in all_blocks:
+                        if block.get('block_type') == 3:  # Heading block
+                            title_block_id = block.get('block_id')
+                            break
+
+                    # Delete all blocks after the title
+                    api_client.delete_blocks_after_title(document_id, title_block_id)
+                    time.sleep(1)  # Wait for deletion to complete
+        else:
+            # Create a new document
+            new_doc_data = api_client.create_document(config.FOLDER_TOKEN)
+            document_id = new_doc_data.get("document", {}).get("document_id")
+
+        if not document_id:
+            raise Exception("Failed to get document_id.")
+
+        # 3. Convert markdown to blocks
+        blocks = api_client.convert_markdown_to_blocks(markdown_content)
+
+        # 4. Insert blocks into the document
         api_client.insert_blocks(document_id, blocks)
 
-        doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+        # Use the same domain as the input doc_url if provided
+        if request.doc_url:
+            match = re.search(r'https://([^/]+)', request.doc_url)
+            if match:
+                domain = match.group(1)
+                doc_url = f"https://{domain}/docx/{document_id}"
+            else:
+                doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+        else:
+            doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+
         return {"success": True, "url": doc_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
