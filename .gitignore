@@ -6,3 +6,4 @@ api/config.py
 */config
 /doc/*
 test.md
+__pycache__

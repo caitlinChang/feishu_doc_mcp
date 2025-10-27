@@ -106,7 +106,7 @@ def create_mr(
     # reviewer_ids: Optional[List[int]] = None,
     # work_item_ids: Optional[List[str]] = None,
 ) -> CreateMergeRequestResponse:
-    url = "https://code.byted.org/api/v2/?Action=CreateMergeRequest"
+    url = config.CREATE_MR_URL
     headers = {
         'accept': 'application/json, text/plain, */*',
         'accept-language': 'zh-CN,zh;q=0.9',
