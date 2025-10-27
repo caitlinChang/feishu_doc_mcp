@@ -13,9 +13,9 @@ REDIRECT_URI = config.REDIRECT_URI
 app = FastAPI()
 
 # Configuration from your Feishu app
-APP_ID = 'cli_9ff99e2a687a100e'
-APP_SECRET = '7gahJEEkhktRmiUEGDeRKnG1WjVSIVWA'
-REDIRECT_URI = 'http://127.0.0.1:8000/callback'
+APP_ID = config.APP_ID
+APP_SECRET = config.APP_SECRET
+REDIRECT_URI = config.REDIRECT_URI
 
 @app.get("/authorize")
 async def authorize():
