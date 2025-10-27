@@ -99,7 +99,8 @@ class FeishuDocAPI:
             raise Exception(f"API Error: {data.get('msg', 'Unknown error')}")
         
         return data.get("data", {}).get("content", "")
-
+    
+    # 将Markdown/HTML 格式的内容转换为文档块
     def convert_markdown_to_blocks(self, markdown_content: str) -> List[Dict]:
         access_token = self.get_access_token()
         url = f"{self.base_url}/docx/v1/documents/blocks/convert"
@@ -137,7 +138,7 @@ class FeishuDocAPI:
 
     def insert_blocks(self, document_id: str, blocks: List[Dict]):
         access_token = self.get_access_token()
-        url = f"{self.base_url}/docx/v1/documents/{document_id}/blocks/{document_id}/children"
+        url = f"{self.base_url}/docx/v1/documents/{document_id}/blocks"
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json; charset=utf-8"

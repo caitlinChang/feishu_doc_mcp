@@ -78,14 +78,13 @@ async def create_mr_endpoint(request: CreateMRRequest):
 
 
 class CreateDocRequest(BaseModel):
-    folder_token: str
     markdown_content: str
 
 @app.post("/create-doc")
 async def create_doc_endpoint(request: CreateDocRequest):
     try:
         # 1. Create an empty document
-        new_doc_data = api_client.create_document(request.folder_token)
+        new_doc_data = api_client.create_document(config.FOLDER_TOKEN)
         document_id = new_doc_data.get("document", {}).get("document_id")
 
         # 2. Convert markdown to blocks
@@ -115,7 +114,7 @@ def run_server():
         print("2. 授权后，您将被重定向到一个URL。请完整复制那个重定向后的URL。")
         print("   (例如: https://lumi-boe.bytedance.net/?code=...)")
         print("\n3. 打开一个新的终端，运行以下命令 (将'PASTE_URL_HERE'替换为您复制的URL):")
-        print("\n   python get_token.py \"PASTE_URL_HERE\"\n")
+        print("\n   python3 get_token.py \"PASTE_URL_HERE\"\n")
         print("4. 成功生成 `refresh_token.txt` 文件后，请重新启动本服务 (python server_http.py)。")
         print("="*80)
         return # Stop server execution if token is missing
