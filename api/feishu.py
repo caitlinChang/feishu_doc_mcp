@@ -3,6 +3,7 @@ import requests
 import re
 from urllib.parse import quote
 from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict
 
 from . import config
 
@@ -130,15 +131,15 @@ class FeishuDocAPI:
         if body:
             payload['body'] = body
         response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
         data = response.json()
         if data.get("code") != 0:
             raise Exception(f"API Error: {data.get('msg', 'Unknown error')}, code: {data.get('code')}")
-        response.raise_for_status()
         return data.get("data")
 
-    def insert_blocks(self, document_id: str, blocks: List[Dict]):
+    def insert_blocks(self, document_id: str, blocks: List[Dict], retries: int = 3, delay: int = 2):
         access_token = self.get_access_token()
-        url = f"{self.base_url}/docx/v1/documents/{document_id}/blocks"
+        url = f"{self.base_url}/docx/v1/documents/{document_id}/blocks/{document_id}/children"
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json; charset=utf-8"
@@ -146,13 +147,23 @@ class FeishuDocAPI:
         payload = {
             "children": blocks
         }
-        response = requests.post(url, headers=headers, json=payload)
-        data = response.json()
-        if data.get("code") != 0:
-            raise Exception(f"API Error: {data.get('msg', 'Unknown error')}, code: {data.get('code')}")
 
-        response.raise_for_status()
-        return data.get("data")
+        for attempt in range(retries):
+            try:
+                response = requests.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                if data.get("code") == 0:
+                    print("✅ Blocks inserted successfully.")
+                    return data.get("data")
+                else:
+                    raise Exception(f"API Error: {data.get('msg', 'Unknown error')}, code: {data.get('code')}")
+            except requests.exceptions.RequestException as e:
+                print(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < retries - 1:
+                    time.sleep(delay)
+                else:
+                    raise
 
 # --- Markdown Parsing Functions ---
 def parse_blocks_to_md(data: dict) -> str:

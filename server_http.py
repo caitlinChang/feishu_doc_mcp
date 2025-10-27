@@ -78,24 +78,51 @@ async def create_mr_endpoint(request: CreateMRRequest):
 
 
 class CreateDocRequest(BaseModel):
-    markdown_content: str
+    url: str
+    doc_url: Optional[str] = None
+
 
 @app.post("/create-doc")
 async def create_doc_endpoint(request: CreateDocRequest):
     try:
-        # 1. Create an empty document
-        new_doc_data = api_client.create_document(config.FOLDER_TOKEN)
-        document_id = new_doc_data.get("document", {}).get("document_id")
+        # 1. Read markdown content from the given file path
+        try:
+            with open(request.url, 'r', encoding='utf-8') as f:
+                markdown_content = f.read()
+        except FileNotFoundError:
+            raise HTTPException(status_code=400, detail=f"File not found at path: {request.url}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
 
-        # 2. Convert markdown to blocks
-        blocks = api_client.convert_markdown_to_blocks(request.markdown_content)
+        document_id = None
+        # 2. Determine the document_id
+        if request.doc_url:
+            # Extract document_id from doc_url
+            match = re.search(r'/docx/([a-zA-Z0-9]+)', request.doc_url)
+            if match:
+                document_id = match.group(1)
+            else:
+                raise HTTPException(status_code=400, detail="Invalid doc_url format. Could not extract document_id.")
+        else:
+            # Create a new empty document
+            new_doc_data = api_client.create_document(config.FOLDER_TOKEN)
+            document_id = new_doc_data.get("document", {}).get("document_id")
 
-        # 3. Insert blocks into the new document
+        if not document_id:
+            raise HTTPException(status_code=500, detail="Failed to get document_id.")
+
+        # 3. Convert markdown to blocks
+        blocks = api_client.convert_markdown_to_blocks(markdown_content)
+
+        # 4. Insert blocks into the document
         api_client.insert_blocks(document_id, blocks)
 
-        doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
-        return {"success": True, "url": doc_url}
+        final_doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+        return {"success": True, "url": final_doc_url}
     except Exception as e:
+        # To be safe, catch any other exceptions and return a 500 error
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 # --- Server Startup Logic ---
