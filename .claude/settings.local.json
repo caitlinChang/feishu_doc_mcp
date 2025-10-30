@@ -10,7 +10,11 @@
       "Bash(python3 get-pip.py)",
       "Bash(python3 -m pip install -r requirements.txt)",
       "Bash(curl:*)",
-      "WebFetch(domain:open.larkoffice.com)"
+      "WebFetch(domain:open.larkoffice.com)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(python3:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": []
   }

@@ -32,7 +32,7 @@ class CreateMRRequest(BaseModel):
     target_branch: str
 
 @mcp.tool()
-def fetch_doc(request: DocRequest):
+def fetch_doc(url: str, format: Optional[str] = None):
     """
     Fetch Feishu document content from URL and convert to Markdown.
     Args:
@@ -42,23 +42,23 @@ def fetch_doc(request: DocRequest):
         A dictionary containing the success status, markdown content, and file path.
     """
     try:
-        if request.format == 'markdown':
-            md_content = api_client.get_content_as_markdown(request.url)
+        if format == 'markdown':
+            md_content = api_client.get_content_as_markdown(url)
         else:
-            content = api_client.get_content(request.url)
+            content = api_client.get_content(url)
             md_content = parse_blocks_to_md(content)
-        
+
         doc_dir = "doc"
         if not os.path.exists(doc_dir):
             os.makedirs(doc_dir)
-        
-        sanitized_token = re.sub(r'[\W_]+', '-', request.url.split('/')[-1])
+
+        sanitized_token = re.sub(r'[\W_]+', '-', url.split('/')[-1])
         filename = f"feishu_content_{sanitized_token}.md"
         filepath = os.path.join(doc_dir, filename)
-        
+
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(md_content)
-        
+
         return {
             "success": True,
             "markdown_content": md_content,
@@ -68,7 +68,7 @@ def fetch_doc(request: DocRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @mcp.tool()
-def create_doc(request: CreateDocRequest):
+def create_doc(url: str, doc_url: Optional[str] = None, is_replace: Optional[bool] = False):
     """
     Create a new Feishu document with markdown content from a file, or update an existing document.
     Args:
@@ -83,22 +83,22 @@ def create_doc(request: CreateDocRequest):
 
     try:
         # 1. Read markdown content from file
-        with open(request.url, 'r', encoding='utf-8') as f:
+        with open(url, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
 
         document_id = None
 
         # 2. Determine the document_id
-        if request.doc_url:
+        if doc_url:
             # Use existing document
             # Extract document_id from doc_url
-            match = re.search(r'/docx/([a-zA-Z0-9]+)', request.doc_url)
+            match = re.search(r'/docx/([a-zA-Z0-9]+)', doc_url)
             if match:
                 document_id = match.group(1)
             else:
                 raise Exception("Invalid doc_url format. Could not extract document_id.")
 
-            if request.is_replace:
+            if is_replace:
                 # Get all blocks and filter deletable ones
                 all_blocks = api_client.get_all_blocks(document_id)
                 if all_blocks:
@@ -127,22 +127,22 @@ def create_doc(request: CreateDocRequest):
         api_client.insert_blocks(document_id, blocks)
 
         # Use the same domain as the input doc_url if provided
-        if request.doc_url:
-            match = re.search(r'https://([^/]+)', request.doc_url)
+        if doc_url:
+            match = re.search(r'https://([^/]+)', doc_url)
             if match:
                 domain = match.group(1)
-                doc_url = f"https://{domain}/docx/{document_id}"
+                result_doc_url = f"https://{domain}/docx/{document_id}"
             else:
-                doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+                result_doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
         else:
-            doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
+            result_doc_url = f"https://bytedance.larkoffice.com/docx/{document_id}"
 
-        return {"success": True, "url": doc_url}
+        return {"success": True, "url": result_doc_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @mcp.tool()
-def create_mr_mcp(request: CreateMRRequest):
+def create_mr_mcp(title: str, description: str, source_branch: str, target_branch: str):
     """
     Create a new merge request.
     Args:
@@ -155,10 +155,10 @@ def create_mr_mcp(request: CreateMRRequest):
     """
     try:
         return create_mr(
-            title=request.title,
-            description=request.description,
-            source_branch=request.source_branch,
-            target_branch=request.target_branch,
+            title=title,
+            description=description,
+            source_branch=source_branch,
+            target_branch=target_branch,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
